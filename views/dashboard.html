@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAPACITY BUILDING — Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50">
+
+<!-- HEADER -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-bold text-slate-800">CAPACITY BUILDING</h1>
+      <p id="userLabel" class="text-xs text-slate-500"></p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="newRequestBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Create Request</button>
+      <button id="logoutBtn" class="text-sm text-slate-500 hover:text-slate-700">Log out</button>
+    </div>
+  </div>
+  <div class="max-w-6xl mx-auto px-4 flex gap-4 border-t border-slate-100" id="tabBar"></div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- REQUESTER: MY REQUESTS -->
+  <section id="myRequestsSection" class="hidden">
+    <h2 class="text-base font-semibold text-slate-700 mb-3">My Requests</h2>
+    <div id="myRequestsList" class="space-y-3"></div>
+  </section>
+
+  <!-- SERVICE LEAD: SORTED QUEUE -->
+  <section id="queueSection" class="hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base font-semibold text-slate-700">Incoming Service Queue</h2>
+      <span class="text-xs text-slate-400">Sorted by deadline, then submission order (FIFO)</span>
+    </div>
+    <div id="queueList" class="space-y-3"></div>
+  </section>
+
+</main>
+
+<!-- CREATE REQUEST MODAL -->
+<div id="createModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    <h3 class="text-lg font-bold text-slate-800 mb-4">Create Service Request</h3>
+    <form id="createForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Target Department</label>
+        <select id="cTargetDept" required class="w-full border border-slate-300 rounded-lg px-3 py-2"></select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Service Category</label>
+        <select id="cCategory" class="w-full border border-slate-300 rounded-lg px-3 py-2"></select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Title</label>
+        <input type="text" id="cTitle" required class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+        <textarea id="cDescription" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Required Due Date/Time</label>
+        <input type="datetime-local" id="cDueDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Attach Brief File</label>
+        <input type="file" id="cAttachment" class="w-full text-sm" />
+      </div>
+      <p id="createError" class="text-sm text-red-600 hidden"></p>
+      <div class="flex gap-2 justify-end pt-2">
+        <button type="button" id="cancelCreate" class="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TASK DETAIL MODAL -->
+<div id="detailModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+    <div id="detailContent"></div>
+    <button id="closeDetail" class="mt-4 px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100">Close</button>
+  </div>
+</div>
+
+<script src="/views/app.js"></script>
+<script>
+requireLogin();
+const user = getUser();
+document.getElementById('userLabel').textContent = `${user.full_name} — ${user.role_name}${user.department_name ? ' · ' + user.department_name : ''}`;
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+const isRequester = user.role_name === 'Requester';
+const isAssigneeLike = user.role_name === 'Assignee' || user.role_name === 'Admin';
+
+// --- Tabs -------------------------------------------------------------
+const tabBar = document.getElementById('tabBar');
+const tabs = [];
+if (isRequester) tabs.push({ id: 'myRequestsSection', label: 'My Requests' });
+if (isAssigneeLike) tabs.push({ id: 'queueSection', label: 'Service Queue' });
+tabBar.innerHTML = tabs.map((t, i) =>
+  `<button data-target="${t.id}" class="tabBtn py-3 text-sm font-medium border-b-2 ${i === 0 ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}">${t.label}</button>`
+).join('');
+document.querySelectorAll('.tabBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabBtn').forEach(b => b.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500');
+    btn.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600';
+    tabs.forEach(t => document.getElementById(t.id).classList.add('hidden'));
+    document.getElementById(btn.dataset.target).classList.remove('hidden');
+  });
+});
+if (tabs.length) document.getElementById(tabs[0].id).classList.remove('hidden');
+document.getElementById('newRequestBtn').classList.toggle('hidden', !isRequester);
+
+// --- Create Request modal ---------------------------------------------
+const createModal = document.getElementById('createModal');
+document.getElementById('newRequestBtn').addEventListener('click', async () => {
+  await populateDeptAndCategory();
+  createModal.classList.remove('hidden');
+});
+document.getElementById('cancelCreate').addEventListener('click', () => createModal.classList.add('hidden'));
+
+async function populateDeptAndCategory() {
+  const deptSelect = document.getElementById('cTargetDept');
+  const catSelect = document.getElementById('cCategory');
+  const { departments } = await api('/requests/lookups/departments');
+  deptSelect.innerHTML = departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  await refreshCategories();
+  deptSelect.addEventListener('change', refreshCategories);
+
+  async function refreshCategories() {
+    const { categories } = await api(`/requests/lookups/categories?departmentId=${deptSelect.value}`);
+    catSelect.innerHTML = '<option value="">(none)</option>' + categories.map(c => `<option value="${c.id}">${c.category_name}</option>`).join('');
+  }
+}
+
+document.getElementById('createForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('createError');
+  errorEl.classList.add('hidden');
+  try {
+    const form = new FormData();
+    form.append('targetDepartmentId', document.getElementById('cTargetDept').value);
+    form.append('categoryId', document.getElementById('cCategory').value);
+    form.append('title', document.getElementById('cTitle').value);
+    form.append('description', document.getElementById('cDescription').value);
+    form.append('requestedDueDate', document.getElementById('cDueDate').value);
+    const fileInput = document.getElementById('cAttachment');
+    if (fileInput.files[0]) form.append('attachment', fileInput.files[0]);
+
+    await api('/requests', { method: 'POST', body: form, isForm: true });
+    createModal.classList.add('hidden');
+    document.getElementById('createForm').reset();
+    loadMyRequests();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
+});
+
+// --- My Requests (Requester) -------------------------------------------
+async function loadMyRequests() {
+  if (!isRequester) return;
+  const list = document.getElementById('myRequestsList');
+  list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+  try {
+    const { requests } = await api('/requests/mine');
+    if (!requests.length) {
+      list.innerHTML = '<p class="text-slate-400 text-sm">You have not submitted any requests yet.</p>';
+      return;
+    }
+    list.innerHTML = requests.map(renderRequesterCard).join('');
+    attachDetailHandlers();
+    document.querySelectorAll('.deleteRequestBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this completed request permanently? This cannot be undone.')) return;
+        try {
+          await api(`/requests/${btn.dataset.id}`, { method: 'DELETE' });
+          loadMyRequests();
+        } catch (err) { alert(err.message); }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+  }
+}
+
+function statusPill(status) {
+  const map = {
+    PENDING: 'bg-slate-100 text-slate-700',
+    IN_PROGRESS: 'bg-blue-100 text-blue-700',
+    COMPLETED: 'bg-green-100 text-green-700',
+    CANCELLED: 'bg-slate-200 text-slate-500 line-through',
+  };
+  return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${map[status] || ''}">${status.replace('_',' ')}</span>`;
+}
+
+function renderRequesterCard(r) {
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-4 flex justify-between items-start hover:border-indigo-300" data-id="${r.id}">
+    <div class="detail-trigger cursor-pointer" data-id="${r.id}">
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="font-semibold text-slate-800">${r.title}</h3>
+        ${statusPill(r.status)}
+      </div>
+      <p class="text-sm text-slate-500">${r.target_department_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
+      <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)}</p>
+      ${r.status === 'COMPLETED' ? `<button class="deleteRequestBtn text-xs text-red-600 hover:underline mt-2" data-id="${r.id}">Delete</button>` : ''}
+    </div>
+    <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
+  </div>`;
+}
+
+// --- Service Queue (Assignee/Admin) -------------------------------------
+async function loadQueue() {
+  if (!isAssigneeLike) return;
+  const list = document.getElementById('queueList');
+  list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+  try {
+    const { requests } = await api('/requests/queue');
+    if (!requests.length) {
+      list.innerHTML = '<p class="text-slate-400 text-sm">Queue is empty. Nothing pending right now.</p>';
+      return;
+    }
+    list.innerHTML = requests.map(renderQueueCard).join('');
+    attachDetailHandlers();
+    attachQueueActionHandlers();
+  } catch (err) {
+    list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+  }
+}
+
+function renderQueueCard(r) {
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-4">
+    <div class="flex justify-between items-start">
+      <div class="detail-trigger cursor-pointer" data-id="${r.id}">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="font-semibold text-slate-800">${r.title}</h3>
+          ${statusPill(r.status)}
+        </div>
+        <p class="text-sm text-slate-500">From ${r.requester_name} · ${r.category_name || 'General'}</p>
+        <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)} · Submitted ${formatDate(r.created_at)}</p>
+      </div>
+      <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
+    </div>
+    <div class="mt-3 flex gap-2">
+      ${r.status === 'PENDING' ? `<button class="startBtn text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700" data-id="${r.id}">Start Working</button>` : ''}
+      ${r.status === 'IN_PROGRESS' ? `<button class="deliverBtn text-sm px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700" data-id="${r.id}">Complete &amp; Deliver</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function attachQueueActionHandlers() {
+  document.querySelectorAll('.startBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        await api(`/requests/${btn.dataset.id}/start`, { method: 'POST' });
+        loadQueue();
+      } catch (err) { alert(err.message); }
+    });
+  });
+  document.querySelectorAll('.deliverBtn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDeliverPrompt(btn.dataset.id);
+    });
+  });
+}
+
+function openDeliverPrompt(requestId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    const form = new FormData();
+    form.append('deliverable', input.files[0]);
+    try {
+      await api(`/requests/${requestId}/deliver`, { method: 'POST', body: form, isForm: true });
+      loadQueue();
+    } catch (err) { alert(err.message); }
+  };
+  input.click();
+}
+
+// --- Task Detail modal (comments) ---------------------------------------
+const detailModal = document.getElementById('detailModal');
+document.getElementById('closeDetail').addEventListener('click', () => detailModal.classList.add('hidden'));
+
+function attachDetailHandlers() {
+  document.querySelectorAll('.detail-trigger').forEach(el => {
+    el.addEventListener('click', () => openDetail(el.dataset.id));
+  });
+}
+
+async function openDetail(id) {
+  const content = document.getElementById('detailContent');
+  content.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+  detailModal.classList.remove('hidden');
+  try {
+    const [{ request: r }, { comments }] = await Promise.all([
+      api(`/requests/${id}`),
+      api(`/requests/${id}/comments`),
+    ]);
+    content.innerHTML = `
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="text-lg font-bold text-slate-800">${r.title}</h3>
+        ${statusPill(r.status)}
+      </div>
+      <p class="text-sm text-slate-500 mb-1">${r.target_department_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
+      <p class="text-sm text-slate-600 mb-2">${r.description || ''}</p>
+      <p class="text-xs text-slate-400">Due ${formatDate(r.requested_due_date)} · Submitted ${formatDate(r.created_at)}</p>
+      ${r.attachment_url ? `<a class="text-sm text-indigo-600 underline" href="${r.attachment_url}" target="_blank">View brief attachment</a><br/>` : ''}
+      ${r.completed_attachment_url ? `<button id="downloadDeliverableBtn" data-id="${r.id}" class="text-sm text-green-600 underline font-medium">⬇ Download Deliverable</button>` : ''}
+      <hr class="my-3" />
+      <h4 class="text-sm font-semibold text-slate-700 mb-2">Discussion</h4>
+      <div class="space-y-2 mb-3 max-h-48 overflow-y-auto">
+        ${comments.length ? comments.map(c => `
+          <div class="bg-slate-50 rounded-lg p-2">
+            <p class="text-xs font-medium text-slate-700">${c.author_name}</p>
+            <p class="text-sm text-slate-600">${c.message || ''}</p>
+            ${c.attachment_url ? `<a class="text-xs text-indigo-600 underline" href="${c.attachment_url}" target="_blank">attachment</a>` : ''}
+          </div>`).join('') : '<p class="text-xs text-slate-400">No comments yet.</p>'}
+      </div>
+      <form id="commentForm" class="flex gap-2">
+        <input type="text" id="commentMessage" placeholder="Write a comment…" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+        <button type="submit" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium">Post Comment</button>
+      </form>
+    `;
+    ;
+    document.getElementById('commentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('commentMessage');
+      if (!input.value.trim()) return;
+      try {
+        await api(`/requests/${id}/comments`, { method: 'POST', body: { message: input.value } });
+        openDetail(id);
+      } catch (err) { alert(err.message); }
+    });
+
+    // <-- THIS BLOCK MOVES HERE, still inside the try, still inside openDetail
+    const downloadBtn = document.getElementById('downloadDeliverableBtn');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`/api/requests/${downloadBtn.dataset.id}/download`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Download failed.');
+          }
+          const blob = await res.blob();
+          const disposition = res.headers.get('Content-Disposition') || '';
+          const match = disposition.match(/filename="?([^"]+)"?/);
+          const filename = match ? match[1] : 'deliverable';
+
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    }
+    // <-- end moved block
+
+  } catch (err) {
+    content.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+  }
+}
+loadMyRequests();
+loadQueue();
+</script>
+</body>
+</html>

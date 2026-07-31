@@ -1,0 +1,8 @@
+node_modules/
+.env
+uploads/briefs/*
+!uploads/briefs/.gitkeep
+uploads/deliverables/*
+!uploads/deliverables/.gitkeep
+npm-debug.log*
+.DS_Store

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAPACITY BUILDING — Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50">
+
+<header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-bold text-slate-800">CAPACITY BUILDING — Admin Console</h1>
+      <p id="userLabel" class="text-xs text-slate-500"></p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/views/dashboard.html" class="text-sm text-indigo-600 hover:underline">My Dashboard</a>
+      <button id="logoutBtn" class="text-sm text-slate-500 hover:text-slate-700">Log out</button>
+    </div>
+  </div>
+  <div class="max-w-6xl mx-auto px-4 flex gap-4 border-t border-slate-100" id="tabBar">
+    <button data-target="overviewSection" class="tabBtn py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600">Overview</button>
+    <button data-target="usersSection" class="tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500">Users</button>
+    <button data-target="deptSection" class="tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500">Departments</button>
+    <button data-target="catSection" class="tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500">Categories</button>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- OVERVIEW -->
+  <section id="overviewSection">
+    <h2 class="text-base font-semibold text-slate-700 mb-3">System Workload Overview</h2>
+    <div id="systemMetrics" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"></div>
+    <h3 class="text-sm font-semibold text-slate-600 mb-2">By Department</h3>
+    <div id="deptMetrics" class="space-y-2"></div>
+  </section>
+
+  <!-- USERS -->
+  <section id="usersSection" class="hidden">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-base font-semibold text-slate-700">Users</h2>
+      <button id="newUserBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Add User</button>
+    </div>
+    <div id="usersTable" class="bg-white rounded-xl border border-slate-200 overflow-x-auto"></div>
+  </section>
+
+  <!-- DEPARTMENTS -->
+  <section id="deptSection" class="hidden">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-base font-semibold text-slate-700">Departments</h2>
+      <button id="newDeptBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Add Department</button>
+    </div>
+    <div id="deptTable" class="bg-white rounded-xl border border-slate-200 overflow-x-auto"></div>
+  </section>
+
+  <!-- CATEGORIES -->
+  <section id="catSection" class="hidden">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-base font-semibold text-slate-700">Service Categories</h2>
+      <button id="newCatBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Add Category</button>
+    </div>
+    <div id="catTable" class="bg-white rounded-xl border border-slate-200 overflow-x-auto"></div>
+  </section>
+
+</main>
+
+<!-- GENERIC MODAL -->
+<div id="modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-20">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <h3 id="modalTitle" class="text-lg font-bold text-slate-800 mb-4"></h3>
+    <form id="modalForm" class="space-y-4"></form>
+  </div>
+</div>
+
+<script src="/views/app.js"></script>
+<script>
+requireLogin();
+const user = getUser();
+if (user.role_name !== 'Admin') window.location.href = '/views/dashboard.html';
+document.getElementById('userLabel').textContent = `${user.full_name} — Admin`;
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+document.querySelectorAll('.tabBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tabBtn').forEach(b => b.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500');
+    btn.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600';
+    ['overviewSection','usersSection','deptSection','catSection'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    document.getElementById(btn.dataset.target).classList.remove('hidden');
+  });
+});
+
+let departmentsCache = [];
+
+// --- Overview -----------------------------------------------------------
+async function loadOverview() {
+  const { systemMetrics, byDepartment } = await api('/admin/overview');
+  const cards = [
+    ['Total', systemMetrics.total_requests],
+    ['Pending', systemMetrics.pending_count],
+    ['In Progress', systemMetrics.in_progress_count],
+    ['Completed', systemMetrics.completed_count],
+    ['Urgent (≤24h)', systemMetrics.urgent_count],
+  ];
+  document.getElementById('systemMetrics').innerHTML = cards.map(([label, val]) => `
+    <div class="bg-white rounded-xl border border-slate-200 p-4 text-center">
+      <p class="text-2xl font-bold text-slate-800">${val}</p>
+      <p class="text-xs text-slate-500">${label}</p>
+    </div>`).join('');
+
+  document.getElementById('deptMetrics').innerHTML = byDepartment.map(d => `
+    <div class="bg-white rounded-xl border border-slate-200 p-3 flex justify-between items-center text-sm">
+      <span class="font-medium text-slate-700">${d.name}</span>
+      <span class="text-slate-500">Pending ${d.pending_count} · In Progress ${d.in_progress_count} · Completed ${d.completed_count} · <span class="text-red-600 font-medium">Urgent ${d.urgent_count}</span></span>
+    </div>`).join('');
+}
+
+// --- Users ----------------------------------------------------------------
+async function loadUsers() {
+  const { users } = await api('/admin/users');
+  const table = document.getElementById('usersTable');
+  table.innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500 text-left">
+        <tr><th class="p-3">Name</th><th class="p-3">Email</th><th class="p-3">Department</th><th class="p-3">Role</th><th class="p-3">Status</th><th class="p-3"></th></tr>
+      </thead>
+      <tbody>
+        ${users.map(u => `
+          <tr class="border-t border-slate-100">
+            <td class="p-3">${u.full_name}</td>
+            <td class="p-3">${u.email}</td>
+            <td class="p-3">${u.department_name || '—'}</td>
+            <td class="p-3">${u.role_name}</td>
+            <td class="p-3">${u.is_active ? '<span class="text-green-600">Active</span>' : '<span class="text-slate-400">Inactive</span>'}</td>
+            <td class="p-3 text-right">
+              ${u.is_active ? `<button class="deactivateBtn text-xs text-red-600 hover:underline" data-id="${u.id}">Deactivate</button>` : ''}
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.querySelectorAll('.deactivateBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Deactivate this user?')) return;
+      await api(`/admin/users/${btn.dataset.id}/deactivate`, { method: 'POST' });
+      loadUsers();
+    });
+  });
+}
+
+document.getElementById('newUserBtn').addEventListener('click', () => {
+  openModal('Add User', [
+    { id: 'fullName', label: 'Full Name', type: 'text' },
+    { id: 'email', label: 'Corporate Email', type: 'email' },
+    { id: 'password', label: 'Temporary Password', type: 'password' },
+    { id: 'departmentId', label: 'Home Department', type: 'select', options: departmentsCache.map(d => [d.id, d.name]) },
+    { id: 'roleName', label: 'Role', type: 'select', options: [['Requester','Requester'],['Assignee','Assignee (Service Lead)'],['Admin','Admin']] },
+  ], async (values) => {
+    await api('/admin/users', { method: 'POST', body: values });
+    loadUsers();
+  });
+});
+
+// --- Departments ------------------------------------------------------
+async function loadDepartments() {
+  const { departments } = await api('/admin/departments');
+  departmentsCache = departments;
+  const table = document.getElementById('deptTable');
+  table.innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500 text-left"><tr><th class="p-3">Name</th><th class="p-3"></th></tr></thead>
+      <tbody>
+        ${departments.map(d => `
+          <tr class="border-t border-slate-100">
+            <td class="p-3">${d.name}</td>
+            <td class="p-3 text-right"><button class="deleteDeptBtn text-xs text-red-600 hover:underline" data-id="${d.id}">Delete</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.querySelectorAll('.deleteDeptBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this department? This cannot be undone.')) return;
+      try {
+        await api(`/admin/departments/${btn.dataset.id}`, { method: 'DELETE' });
+        loadDepartments();
+      } catch (err) { alert(err.message); }
+    });
+  });
+}
+
+document.getElementById('newDeptBtn').addEventListener('click', () => {
+  openModal('Add Department', [{ id: 'name', label: 'Department Name', type: 'text' }], async (values) => {
+    await api('/admin/departments', { method: 'POST', body: values });
+    loadDepartments();
+  });
+});
+
+// --- Categories -------------------------------------------------------
+async function loadCategories() {
+  const { categories } = await api('/admin/categories');
+  const table = document.getElementById('catTable');
+  table.innerHTML = `
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500 text-left"><tr><th class="p-3">Category</th><th class="p-3">Department</th><th class="p-3"></th></tr></thead>
+      <tbody>
+        ${categories.map(c => `
+          <tr class="border-t border-slate-100">
+            <td class="p-3">${c.category_name}</td>
+            <td class="p-3">${c.department_name}</td>
+            <td class="p-3 text-right"><button class="deleteCatBtn text-xs text-red-600 hover:underline" data-id="${c.id}">Delete</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.querySelectorAll('.deleteCatBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this category?')) return;
+      await api(`/admin/categories/${btn.dataset.id}`, { method: 'DELETE' });
+      loadCategories();
+    });
+  });
+}
+
+document.getElementById('newCatBtn').addEventListener('click', () => {
+  openModal('Add Service Category', [
+    { id: 'categoryName', label: 'Category Name', type: 'text' },
+    { id: 'departmentId', label: 'Department', type: 'select', options: departmentsCache.map(d => [d.id, d.name]) },
+    { id: 'description', label: 'Description', type: 'text' },
+  ], async (values) => {
+    await api('/admin/categories', { method: 'POST', body: values });
+    loadCategories();
+  });
+});
+
+// --- Generic modal helper -----------------------------------------------
+const modal = document.getElementById('modal');
+function openModal(title, fields, onSubmit) {
+  document.getElementById('modalTitle').textContent = title;
+  const form = document.getElementById('modalForm');
+  form.innerHTML = fields.map(f => `
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-1">${f.label}</label>
+      ${f.type === 'select'
+        ? `<select id="f_${f.id}" class="w-full border border-slate-300 rounded-lg px-3 py-2">${f.options.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>`
+        : `<input type="${f.type}" id="f_${f.id}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />`}
+    </div>`).join('') + `
+    <p id="modalError" class="text-sm text-red-600 hidden"></p>
+    <div class="flex gap-2 justify-end pt-2">
+      <button type="button" id="modalCancel" class="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+      <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Save</button>
+    </div>`;
+  document.getElementById('modalCancel').addEventListener('click', () => modal.classList.add('hidden'));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('modalError');
+    errorEl.classList.add('hidden');
+    const values = {};
+    fields.forEach(f => values[f.id] = document.getElementById(`f_${f.id}`).value);
+    try {
+      await onSubmit(values);
+      modal.classList.add('hidden');
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    }
+  };
+  modal.classList.remove('hidden');
+}
+
+(async function init() {
+  await loadDepartments();
+  await loadOverview();
+  await loadUsers();
+  await loadCategories();
+})();
+</script>
+</body>
+</html>

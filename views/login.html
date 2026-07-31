@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAPACITY BUILDING — Sign In</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-bold text-slate-800">CAPACITY BUILDING</h1>
+      <p class="text-slate-500 text-sm mt-1">Internal Service Desk &amp; Task Allocation Portal</p>
+    </div>
+
+    <div class="flex mb-6 rounded-lg bg-slate-100 p-1">
+      <button id="tabLogin" class="flex-1 py-2 rounded-md text-sm font-medium bg-white shadow text-slate-800">Sign In</button>
+      <button id="tabRegister" class="flex-1 py-2 rounded-md text-sm font-medium text-slate-500">Registe</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Corporate Email</label>
+        <input type="email" id="loginEmail" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+        <input type="password" id="loginPassword" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <p id="loginError" class="text-sm text-red-600 hidden"></p>
+      <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition">Sign In</button>
+    </form>
+
+    <!-- REGISTER FORM (Requester / Standard Staff only) -->
+    <form id="registerForm" class="space-y-4 hidden">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+        <input type="text" id="regName" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Corporate Email</label>
+        <input type="email" id="regEmail" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Home Department</label>
+        <select id="regDepartment" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+        <input type="password" id="regPassword" required minlength="6" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <p id="registerError" class="text-sm text-red-600 hidden"></p>
+      <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition">Create Account</button>
+      <p class="text-xs text-slate-400 text-center">New accounts are registered as Requester (Standard Staff). Service Lead and Admin accounts are provisioned by your System Admin.</p>
+    </form>
+  </div>
+
+<script src="/views/app.js"></script>
+<script>
+const tabLogin = document.getElementById('tabLogin');
+const tabRegister = document.getElementById('tabRegister');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+let departmentsLoaded = false; // declared up top, before anything can call loadDepartments()
+
+tabLogin.addEventListener('click', () => {
+  tabLogin.className = 'flex-1 py-2 rounded-md text-sm font-medium bg-white shadow text-slate-800';
+  tabRegister.className = 'flex-1 py-2 rounded-md text-sm font-medium text-slate-500';
+  loginForm.classList.remove('hidden');
+  registerForm.classList.add('hidden');
+});
+
+tabRegister.addEventListener('click', () => {
+  tabRegister.className = 'flex-1 py-2 rounded-md text-sm font-medium bg-white shadow text-slate-800';
+  tabLogin.className = 'flex-1 py-2 rounded-md text-sm font-medium text-slate-500';
+  registerForm.classList.remove('hidden');
+  loginForm.classList.add('hidden');
+  loadDepartments();
+});
+
+async function loadDepartments() {
+  const select = document.getElementById('regDepartment');
+  if (departmentsLoaded) return;
+  select.innerHTML = '<option value="">Loading departments…</option>';
+  try {
+    const res = await fetch('/api/requests/lookups/departments');
+    if (!res.ok) throw new Error('Request failed');
+    const data = await res.json();
+    if (!data.departments || data.departments.length === 0) {
+      select.innerHTML = '<option value="">No departments configured yet — ask your Admin to add one</option>';
+      return;
+    }
+    select.innerHTML = data.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    departmentsLoaded = true;
+  } catch (e) {
+    select.innerHTML = '<option value="">Unable to load departments — click Register tab to retry</option>';
+  }
+}
+
+// LOGIN
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('loginError');
+  errorEl.classList.add('hidden');
+  try {
+    const data = await api('/auth/login', {
+      method: 'POST',
+      body: {
+        email: document.getElementById('loginEmail').value,
+        password: document.getElementById('loginPassword').value,
+      },
+    });
+    setSession(data.token, data.user);
+    window.location.href = data.user.role_name === 'Admin' ? '/views/admin.html' : '/views/dashboard.html';
+  } catch (err) {
+    errorEl.textContent = 'Invalid email or password. Please try again.';
+    errorEl.classList.remove('hidden');
+  }
+});
+
+// REGISTER
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('registerError');
+  errorEl.classList.add('hidden');
+
+  const departmentId = document.getElementById('regDepartment').value;
+  if (!departmentId) {
+    errorEl.textContent = 'Please select a Home Department before registering.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  try {
+    const data = await api('/auth/register', {
+      method: 'POST',
+      body: {
+        fullName: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        password: document.getElementById('regPassword').value,
+        departmentId,
+      },
+    });
+    setSession(data.token, data.user);
+    window.location.href = '/views/dashboard.html';
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
+});
+
+loadDepartments();
+</script>
+</body>
+</html>
