@@ -1,0 +1,43 @@
+/* ===================================================================
+   Green Starz Impakt Hub — Brand Theme
+   -------------------------------------------------------------------
+   Color values below are a green/forest palette inspired by the
+   GreenStars brand (greenstarshub.com). I could not read the exact
+   hex codes directly off the live site, so these are a close,
+   professional match rather than a pixel-perfect extraction.
+   If you have official brand hex codes, just update the variables
+   below (and the matching values in tailwind.config in each HTML
+   file) and the whole system will follow.
+   =================================================================== */
+
+:root {
+  --brand-50:  #ECFDF3;
+  --brand-100: #D3F8E1;
+  --brand-300: #7FDDA6;
+  --brand-500: #2FA361;
+  --brand-600: #1E7A46;
+  --brand-700: #145C34;
+  --brand-900: #0B3A20;
+}
+
+/* Header / logo */
+.brand-header-logo {
+  height: 40px;
+  width: 40px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.brand-header-name {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--brand-700);
+  line-height: 1.15;
+}
+
+.brand-header-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
