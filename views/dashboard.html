@@ -3,20 +3,36 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CAPACITY BUILDING — Dashboard</title>
+<title>Green Starz Impakt Hub — Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: { 50:'#ECFDF3', 100:'#D3F8E1', 300:'#7FDDA6', 500:'#2FA361', 600:'#1E7A46', 700:'#145C34', 900:'#0B3A20' }
+        }
+      }
+    }
+  }
+</script>
+<link rel="stylesheet" href="/views/assets/theme.css">
 </head>
 <body class="min-h-screen bg-slate-50">
 
 <!-- HEADER -->
 <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
   <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-    <div>
-      <h1 class="text-lg font-bold text-slate-800">CAPACITY BUILDING</h1>
-      <p id="userLabel" class="text-xs text-slate-500"></p>
+    <div class="brand-header-group">
+      <img src="/views/assets/logo.jpg" alt="Green Starz Impakt Hub" class="brand-header-logo" onerror="this.style.display='none'">
+      <div>
+        <span class="brand-header-name text-sm block">GREEN STARZ IMPAKT HUB</span>
+        <h1 class="text-lg font-bold text-slate-800">CAPACITY BUILDING</h1>
+        <p id="userLabel" class="text-xs text-slate-500"></p>
+      </div>
     </div>
     <div class="flex items-center gap-3">
-      <button id="newRequestBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Create Request</button>
+      <button id="newRequestBtn" class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg">+ Create Request</button>
       <button id="logoutBtn" class="text-sm text-slate-500 hover:text-slate-700">Log out</button>
     </div>
   </div>
@@ -31,12 +47,13 @@
     <div id="myRequestsList" class="space-y-3"></div>
   </section>
 
-  <!-- SERVICE LEAD: SORTED QUEUE -->
+  <!-- SERVICE LEAD / ADMIN: REQUESTS -->
   <section id="queueSection" class="hidden">
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-base font-semibold text-slate-700">Incoming Service Queue</h2>
+      <h2 id="queueHeading" class="text-base font-semibold text-slate-700">Incoming Service Queue</h2>
       <span class="text-xs text-slate-400">Sorted by deadline, then submission order (FIFO)</span>
     </div>
+    <div id="queueSubTabs" class="hidden gap-2 mb-4"></div>
     <div id="queueList" class="space-y-3"></div>
   </section>
 
@@ -74,7 +91,7 @@
       <p id="createError" class="text-sm text-red-600 hidden"></p>
       <div class="flex gap-2 justify-end pt-2">
         <button type="button" id="cancelCreate" class="px-4 py-2 rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
-        <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Submit Request</button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium">Submit Request</button>
       </div>
     </form>
   </div>
@@ -96,20 +113,22 @@ document.getElementById('userLabel').textContent = `${user.full_name} — ${user
 document.getElementById('logoutBtn').addEventListener('click', logout);
 
 const isRequester = user.role_name === 'Requester';
-const isAssigneeLike = user.role_name === 'Assignee' || user.role_name === 'Admin';
+const isAssignee = user.role_name === 'Assignee';
+const isAdmin = user.role_name === 'Admin';
+const isAssigneeLike = isAssignee || isAdmin;
 
 // --- Tabs -------------------------------------------------------------
 const tabBar = document.getElementById('tabBar');
 const tabs = [];
 if (isRequester) tabs.push({ id: 'myRequestsSection', label: 'My Requests' });
-if (isAssigneeLike) tabs.push({ id: 'queueSection', label: 'Service Queue' });
+if (isAssigneeLike) tabs.push({ id: 'queueSection', label: isAdmin ? 'Requests' : 'Service Queue' });
 tabBar.innerHTML = tabs.map((t, i) =>
-  `<button data-target="${t.id}" class="tabBtn py-3 text-sm font-medium border-b-2 ${i === 0 ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}">${t.label}</button>`
+  `<button data-target="${t.id}" class="tabBtn py-3 text-sm font-medium border-b-2 ${i === 0 ? 'border-brand-600 text-brand-600' : 'border-transparent text-slate-500'}">${t.label}</button>`
 ).join('');
 document.querySelectorAll('.tabBtn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tabBtn').forEach(b => b.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-transparent text-slate-500');
-    btn.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600';
+    btn.className = 'tabBtn py-3 text-sm font-medium border-b-2 border-brand-600 text-brand-600';
     tabs.forEach(t => document.getElementById(t.id).classList.add('hidden'));
     document.getElementById(btn.dataset.target).classList.remove('hidden');
   });
@@ -117,12 +136,47 @@ document.querySelectorAll('.tabBtn').forEach(btn => {
 if (tabs.length) document.getElementById(tabs[0].id).classList.remove('hidden');
 document.getElementById('newRequestBtn').classList.toggle('hidden', !isRequester);
 
+// --- Admin: read-only status tabs (Not Yet Done / In Progress / Completed / Declined) ---
+document.getElementById('queueHeading').textContent = isAdmin ? 'All Service Requests' : 'Incoming Service Queue';
+const adminStatusTabs = [
+  { status: 'PENDING', label: 'Not Yet Done' },
+  { status: 'IN_PROGRESS', label: 'In Progress' },
+  { status: 'COMPLETED', label: 'Completed' },
+  { status: 'DECLINED', label: 'Declined' },
+];
+let currentAdminStatus = 'PENDING';
+if (isAdmin) {
+  const subTabsEl = document.getElementById('queueSubTabs');
+  subTabsEl.classList.remove('hidden');
+  subTabsEl.classList.add('flex');
+  const activeCls = 'adminStatusTab text-sm px-3 py-1.5 rounded-full border bg-brand-600 text-white border-brand-600';
+  const inactiveCls = 'adminStatusTab text-sm px-3 py-1.5 rounded-full border bg-white text-slate-600 border-slate-300';
+  subTabsEl.innerHTML = adminStatusTabs.map((t, i) =>
+    `<button data-status="${t.status}" class="${i === 0 ? activeCls : inactiveCls}">${t.label}</button>`
+  ).join('');
+  subTabsEl.querySelectorAll('.adminStatusTab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentAdminStatus = btn.dataset.status;
+      subTabsEl.querySelectorAll('.adminStatusTab').forEach(b => b.className = inactiveCls);
+      btn.className = activeCls;
+      loadQueue();
+    });
+  });
+}
+
 // --- Create Request modal ---------------------------------------------
 const createModal = document.getElementById('createModal');
 document.getElementById('newRequestBtn').addEventListener('click', async () => {
   await populateDeptAndCategory();
+  document.getElementById('cDueDate').min = toLocalDatetimeInputValue(new Date());
   createModal.classList.remove('hidden');
 });
+
+/** Formats a Date as the local "YYYY-MM-DDTHH:mm" string a datetime-local input expects. */
+function toLocalDatetimeInputValue(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 document.getElementById('cancelCreate').addEventListener('click', () => createModal.classList.add('hidden'));
 
 async function populateDeptAndCategory() {
@@ -143,6 +197,14 @@ document.getElementById('createForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const errorEl = document.getElementById('createError');
   errorEl.classList.add('hidden');
+
+  const dueDateValue = document.getElementById('cDueDate').value;
+  if (!dueDateValue || new Date(dueDateValue) <= new Date()) {
+    errorEl.textContent = 'Required Due Date/Time must be in the future.';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
   try {
     const form = new FormData();
     form.append('targetDepartmentId', document.getElementById('cTargetDept').value);
@@ -176,16 +238,7 @@ async function loadMyRequests() {
     }
     list.innerHTML = requests.map(renderRequesterCard).join('');
     attachDetailHandlers();
-    document.querySelectorAll('.deleteRequestBtn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm('Delete this completed request permanently? This cannot be undone.')) return;
-        try {
-          await api(`/requests/${btn.dataset.id}`, { method: 'DELETE' });
-          loadMyRequests();
-        } catch (err) { alert(err.message); }
-      });
-    });
+    attachRequesterCardHandlers();
   } catch (err) {
     list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
   }
@@ -197,43 +250,95 @@ function statusPill(status) {
     IN_PROGRESS: 'bg-blue-100 text-blue-700',
     COMPLETED: 'bg-green-100 text-green-700',
     CANCELLED: 'bg-slate-200 text-slate-500 line-through',
+    DECLINED: 'bg-red-100 text-red-600 line-through',
   };
   return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${map[status] || ''}">${status.replace('_',' ')}</span>`;
 }
 
 function renderRequesterCard(r) {
   return `
-  <div class="bg-white rounded-xl border border-slate-200 p-4 flex justify-between items-start hover:border-indigo-300" data-id="${r.id}">
-    <div class="detail-trigger cursor-pointer" data-id="${r.id}">
-      <div class="flex items-center gap-2 mb-1">
-        <h3 class="font-semibold text-slate-800">${r.title}</h3>
-        ${statusPill(r.status)}
+  <div class="bg-white rounded-xl border border-slate-200 p-4">
+    <div class="flex justify-between items-start">
+      <div class="detail-trigger cursor-pointer" data-id="${r.id}">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="font-semibold text-slate-800">${r.title}</h3>
+          ${statusPill(r.status)}
+        </div>
+        <p class="text-sm text-slate-500">${r.target_department_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
+        <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)}</p>
       </div>
-      <p class="text-sm text-slate-500">${r.target_department_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
-      <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)}</p>
-      ${r.status === 'COMPLETED' ? `<button class="deleteRequestBtn text-xs text-red-600 hover:underline mt-2" data-id="${r.id}">Delete</button>` : ''}
+      <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
     </div>
-    <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
+    ${r.status === 'PENDING' ? `<div class="mt-3"><button class="requesterCancelBtn text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" data-id="${r.id}">Cancel Request</button></div>` : ''}
   </div>`;
 }
 
-// --- Service Queue (Assignee/Admin) -------------------------------------
+function attachRequesterCardHandlers() {
+  document.querySelectorAll('.requesterCancelBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Cancel this request?')) return;
+      try {
+        await api(`/requests/${btn.dataset.id}/cancel`, { method: 'POST' });
+        loadMyRequests();
+      } catch (err) { alert(err.message); }
+    });
+  });
+}
+
+// --- Service Queue (Assignee: actionable) / Requests (Admin: read-only) ---
 async function loadQueue() {
   if (!isAssigneeLike) return;
   const list = document.getElementById('queueList');
   list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
   try {
-    const { requests } = await api('/requests/queue');
+    const statusParam = isAdmin ? `?status=${currentAdminStatus}` : '';
+    const { requests } = await api(`/requests/queue${statusParam}`);
     if (!requests.length) {
-      list.innerHTML = '<p class="text-slate-400 text-sm">Queue is empty. Nothing pending right now.</p>';
+      list.innerHTML = '<p class="text-slate-400 text-sm">Nothing here right now.</p>';
       return;
     }
-    list.innerHTML = requests.map(renderQueueCard).join('');
+    list.innerHTML = requests.map(isAdmin ? renderAdminRequestCard : renderQueueCard).join('');
     attachDetailHandlers();
-    attachQueueActionHandlers();
+    if (isAdmin) attachAdminRequestHandlers();
+    if (!isAdmin) attachQueueActionHandlers();
   } catch (err) {
     list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
   }
+}
+
+function renderAdminRequestCard(r) {
+  const showAssignee = r.status === 'IN_PROGRESS' || r.status === 'COMPLETED';
+  const canDelete = ['COMPLETED', 'CANCELLED', 'DECLINED'].includes(r.status);
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-4">
+    <div class="flex justify-between items-start">
+      <div class="cursor-pointer detail-trigger" data-id="${r.id}">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="font-semibold text-slate-800">${r.title}</h3>
+          ${statusPill(r.status)}
+        </div>
+        <p class="text-sm text-slate-500">${r.target_department_name} · From ${r.requester_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
+        <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)} · Submitted ${formatDate(r.created_at)}</p>
+        ${showAssignee ? `<p class="text-xs text-slate-500 mt-1">Assignee: <span class="font-medium text-slate-700">${r.assignee_name || 'Unassigned'}</span></p>` : ''}
+      </div>
+      <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
+    </div>
+    ${canDelete ? `<div class="mt-3"><button class="adminDeleteBtn text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" data-id="${r.id}">Delete</button></div>` : ''}
+  </div>`;
+}
+
+function attachAdminRequestHandlers() {
+  document.querySelectorAll('.adminDeleteBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Permanently delete this request? This cannot be undone.')) return;
+      try {
+        await api(`/requests/${btn.dataset.id}`, { method: 'DELETE' });
+        loadQueue();
+      } catch (err) { alert(err.message); }
+    });
+  });
 }
 
 function renderQueueCard(r) {
@@ -251,7 +356,8 @@ function renderQueueCard(r) {
       <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
     </div>
     <div class="mt-3 flex gap-2">
-      ${r.status === 'PENDING' ? `<button class="startBtn text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700" data-id="${r.id}">Start Working</button>` : ''}
+      ${r.status === 'PENDING' ? `<button class="startBtn text-sm px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700" data-id="${r.id}">Start Working</button>` : ''}
+      ${r.status === 'PENDING' ? `<button class="declineBtn text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" data-id="${r.id}">Decline</button>` : ''}
       ${r.status === 'IN_PROGRESS' ? `<button class="deliverBtn text-sm px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700" data-id="${r.id}">Complete &amp; Deliver</button>` : ''}
     </div>
   </div>`;
@@ -263,6 +369,16 @@ function attachQueueActionHandlers() {
       e.stopPropagation();
       try {
         await api(`/requests/${btn.dataset.id}/start`, { method: 'POST' });
+        loadQueue();
+      } catch (err) { alert(err.message); }
+    });
+  });
+  document.querySelectorAll('.declineBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Decline this request? The requester will be notified.')) return;
+      try {
+        await api(`/requests/${btn.dataset.id}/decline`, { method: 'POST' });
         loadQueue();
       } catch (err) { alert(err.message); }
     });
@@ -317,8 +433,8 @@ async function openDetail(id) {
       <p class="text-sm text-slate-500 mb-1">${r.target_department_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
       <p class="text-sm text-slate-600 mb-2">${r.description || ''}</p>
       <p class="text-xs text-slate-400">Due ${formatDate(r.requested_due_date)} · Submitted ${formatDate(r.created_at)}</p>
-      ${r.attachment_url ? `<a class="text-sm text-indigo-600 underline" href="${r.attachment_url}" target="_blank">View brief attachment</a><br/>` : ''}
-      ${r.completed_attachment_url ? `<button id="downloadDeliverableBtn" data-id="${r.id}" class="text-sm text-green-600 underline font-medium">⬇ Download Deliverable</button>` : ''}
+      ${r.attachment_url ? `<a class="text-sm text-brand-600 underline" href="${r.attachment_url}" target="_blank">View brief attachment</a><br/>` : ''}
+      ${r.completed_attachment_url ? `<a class="text-sm text-green-600 underline font-medium" href="/api/requests/${r.id}/download">⬇ Download Deliverable</a>` : ''}
       <hr class="my-3" />
       <h4 class="text-sm font-semibold text-slate-700 mb-2">Discussion</h4>
       <div class="space-y-2 mb-3 max-h-48 overflow-y-auto">
@@ -326,15 +442,14 @@ async function openDetail(id) {
           <div class="bg-slate-50 rounded-lg p-2">
             <p class="text-xs font-medium text-slate-700">${c.author_name}</p>
             <p class="text-sm text-slate-600">${c.message || ''}</p>
-            ${c.attachment_url ? `<a class="text-xs text-indigo-600 underline" href="${c.attachment_url}" target="_blank">attachment</a>` : ''}
+            ${c.attachment_url ? `<a class="text-xs text-brand-600 underline" href="${c.attachment_url}" target="_blank">attachment</a>` : ''}
           </div>`).join('') : '<p class="text-xs text-slate-400">No comments yet.</p>'}
       </div>
       <form id="commentForm" class="flex gap-2">
         <input type="text" id="commentMessage" placeholder="Write a comment…" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-        <button type="submit" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium">Post Comment</button>
+        <button type="submit" class="px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium">Post Comment</button>
       </form>
     `;
-    ;
     document.getElementById('commentForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const input = document.getElementById('commentMessage');
@@ -344,43 +459,11 @@ async function openDetail(id) {
         openDetail(id);
       } catch (err) { alert(err.message); }
     });
-
-    // <-- THIS BLOCK MOVES HERE, still inside the try, still inside openDetail
-    const downloadBtn = document.getElementById('downloadDeliverableBtn');
-    if (downloadBtn) {
-      downloadBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch(`/api/requests/${downloadBtn.dataset.id}/download`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          });
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Download failed.');
-          }
-          const blob = await res.blob();
-          const disposition = res.headers.get('Content-Disposition') || '';
-          const match = disposition.match(/filename="?([^"]+)"?/);
-          const filename = match ? match[1] : 'deliverable';
-
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(url);
-        } catch (err) {
-          alert(err.message);
-        }
-      });
-    }
-    // <-- end moved block
-
   } catch (err) {
     content.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
   }
 }
+
 loadMyRequests();
 loadQueue();
 </script>

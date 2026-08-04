@@ -31,21 +31,38 @@ async function findByRequester(requesterId) {
   return result.rows;
 }
 
-/** Service Lead queue for a given department — the primary sorted view. */
+/**
+ * Service Lead queue for a given department — the primary sorted view.
+ * Pass departmentId = null to return the queue across ALL departments
+ * (used for Admin, who has system-wide oversight).
+ */
 async function findQueueByDepartment(departmentId, { statusFilter } = {}) {
-  const params = [departmentId];
-  let statusClause = "req.status IN ('PENDING','IN_PROGRESS')";
-  if (statusFilter) {
-    params.push(statusFilter);
-    statusClause = `req.status = $${params.length}`;
+  const params = [];
+  const clauses = [];
+
+  if (departmentId !== null && departmentId !== undefined) {
+    params.push(departmentId);
+    clauses.push(`req.target_department_id = $${params.length}`);
   }
+
+  if (Array.isArray(statusFilter)) {
+    params.push(statusFilter);
+    clauses.push(`req.status = ANY($${params.length})`);
+  } else if (statusFilter) {
+    params.push(statusFilter);
+    clauses.push(`req.status = $${params.length}`);
+  } else {
+    clauses.push("req.status IN ('PENDING','IN_PROGRESS')");
+  }
+
   const result = await pool.query(
     `${BASE_SELECT}
-     WHERE req.target_department_id = $1 AND ${statusClause}
+     WHERE ${clauses.join(' AND ')}
      ORDER BY req.requested_due_date ASC, req.created_at ASC`,
     params
   );
   return result.rows;
+
 }
 
 async function findById(id) {
@@ -92,6 +109,18 @@ async function completeAndDeliver(id, completedAttachmentUrl) {
   return result.rows[0] || null;
 }
 
+/** Service Lead declines a task before starting it (distinct from a requester's cancel). */
+async function decline(id, assigneeId) {
+  const result = await pool.query(
+    `UPDATE requests
+     SET status = 'DECLINED'
+     WHERE id = $1 AND status = 'PENDING'
+     RETURNING *`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
 async function cancel(id, requesterId) {
   const result = await pool.query(
     `UPDATE requests
@@ -102,6 +131,7 @@ async function cancel(id, requesterId) {
   );
   return result.rows[0] || null;
 }
+
 async function deleteCompleted(id, requesterId) {
   const result = await pool.query(
     `DELETE FROM requests
@@ -111,6 +141,7 @@ async function deleteCompleted(id, requesterId) {
   );
   return result.rows[0] || null;
 }
+
 async function remove(id) {
   await pool.query('DELETE FROM requests WHERE id = $1', [id]);
 }
@@ -132,7 +163,22 @@ async function systemMetrics() {
   `);
   return result.rows[0];
 }
+/** Requests due within 24h (or already overdue) that haven't triggered a reminder yet. */
+async function findDueSoonUnnotified() {
+  const result = await pool.query(`
+    ${BASE_SELECT}
+    WHERE req.status IN ('PENDING', 'IN_PROGRESS')
+      AND req.reminder_sent = FALSE
+      AND req.requested_due_date <= NOW() + INTERVAL '24 hours'
+    ORDER BY req.requested_due_date ASC
+  `);
+  return result.rows;
+}
 
+/** Marks a request so it won't trigger the same due-soon reminder again. */
+async function markReminderSent(id) {
+  await pool.query('UPDATE requests SET reminder_sent = TRUE WHERE id = $1', [id]);
+}
 module.exports = {
   findByRequester,
   findQueueByDepartment,
@@ -140,8 +186,12 @@ module.exports = {
   create,
   startWorking,
   completeAndDeliver,
+  decline,
   cancel,
   deleteCompleted,
   remove,
   systemMetrics,
+  findDueSoonUnnotified,
+  markReminderSent,
+
 };

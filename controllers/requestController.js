@@ -7,7 +7,7 @@ const path = require('path');
 const requestModel = require('../models/requestModel');
 const userModel = require('../models/userModel');
 const { withBadge } = require('../utils/priority');
-const { statusChangeEmail, deliverableReadyEmail, newRequestEmail } = require('../utils/mailer');
+const { statusChangeEmail, deliverableReadyEmail } = require('../utils/mailer');
 
 /** Requester: [ + Create Request ] -> [ Submit Request ] */
 async function createRequest(req, res) {
@@ -15,6 +15,9 @@ async function createRequest(req, res) {
     const { targetDepartmentId, categoryId, title, description, requestedDueDate } = req.body;
     if (!targetDepartmentId || !title || !requestedDueDate) {
       return res.status(400).json({ error: 'targetDepartmentId, title and requestedDueDate are required.' });
+    }
+    if (new Date(requestedDueDate) <= new Date()) {
+      return res.status(400).json({ error: 'Required Due Date/Time must be in the future.' });
     }
 
     const attachmentUrl = req.file ? `/uploads/briefs/${req.file.filename}` : null;
@@ -30,16 +33,6 @@ async function createRequest(req, res) {
     });
 
     const full = await requestModel.findById(created.id);
-    const deptAssignees = await userModel.findAssigneesByDepartment(targetDepartmentId);
-    deptAssignees.forEach((assignee) => {
-      newRequestEmail({
-        to: assignee.email,
-        assigneeName: assignee.full_name,
-        requesterName: req.user.full_name,
-        requestTitle: full.title,
-        requestId: full.id,
-      });
-    });
     return res.status(201).json({ request: withBadge(full) });
   } catch (err) {
     console.error('createRequest error:', err);
@@ -65,16 +58,25 @@ async function myRequests(req, res) {
  */
 async function departmentQueue(req, res) {
   try {
-    if (!req.user.department_id) {
+    const isAdmin = req.user.role === 'Admin';
+    if (!isAdmin && !req.user.department_id) {
       return res.status(400).json({ error: 'Your account has no assigned department.' });
     }
-    const statusFilter = req.query.status || null;
-    const rows = await requestModel.findQueueByDepartment(req.user.department_id, { statusFilter });
+    let statusFilter = req.query.status || null;
+    // Admin's "Declined" tab shows both assignee-declined and requester-cancelled
+    // requests together, since the two are treated as one bucket in the UI.
+    if (isAdmin && statusFilter === 'DECLINED') {
+      statusFilter = ['DECLINED', 'CANCELLED'];
+    }
+    // Admin sees every department's queue; Assignee sees only their own.
+    const scopeDepartmentId = isAdmin ? null : req.user.department_id;
+    const rows = await requestModel.findQueueByDepartment(scopeDepartmentId, { statusFilter });
     return res.json({ requests: withBadge(rows) });
   } catch (err) {
     console.error('departmentQueue error:', err);
     return res.status(500).json({ error: 'Failed to load department queue.' });
   }
+
 }
 
 async function getRequest(req, res) {
@@ -189,18 +191,49 @@ async function cancelRequest(req, res) {
     return res.status(500).json({ error: 'Failed to cancel request.' });
   }
 }
+
+/** Service Lead: [ Decline ] — rejects a PENDING request before claiming it. */
+async function declineRequest(req, res) {
+  try {
+    const updated = await requestModel.decline(req.params.id, req.user.id);
+    if (!updated) {
+      return res.status(409).json({ error: 'Only PENDING requests can be declined.' });
+    }
+
+    const requester = await userModel.findById(updated.requester_id);
+    if (requester) {
+      statusChangeEmail({
+        to: requester.email,
+        requesterName: requester.full_name,
+        requestTitle: updated.title,
+        requestId: updated.id,
+        newStatus: 'DECLINED',
+      });
+    }
+
+    return res.json({ request: withBadge(updated) });
+  } catch (err) {
+    console.error('declineRequest error:', err);
+    return res.status(500).json({ error: 'Failed to decline request.' });
+  }
+}
+
+/** Admin: permanently deletes a finished request (COMPLETED, CANCELLED, or DECLINED only). */
 async function deleteRequest(req, res) {
   try {
-    const deleted = await requestModel.deleteCompleted(req.params.id, req.user.id);
-    if (!deleted) {
-      return res.status(409).json({ error: 'Only your own COMPLETED requests can be deleted.' });
+    const row = await requestModel.findById(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Request not found.' });
+    if (!['COMPLETED', 'CANCELLED', 'DECLINED'].includes(row.status)) {
+      return res.status(409).json({ error: 'Only completed, cancelled, or declined requests can be deleted.' });
     }
-    return res.status(204).send();
+    await requestModel.remove(row.id);
+    return res.json({ success: true });
   } catch (err) {
     console.error('deleteRequest error:', err);
     return res.status(500).json({ error: 'Failed to delete request.' });
   }
 }
+
 module.exports = {
   createRequest,
   myRequests,
@@ -210,5 +243,6 @@ module.exports = {
   completeAndDeliver,
   downloadDeliverable,
   cancelRequest,
+  declineRequest,
   deleteRequest,
 };

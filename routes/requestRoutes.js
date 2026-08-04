@@ -29,14 +29,15 @@ router.get('/lookups/categories', requireAuth, async (req, res) => {
 router.post('/', requireAuth, requireRole('Requester'), uploadBrief.single('attachment'), requestController.createRequest);
 router.get('/mine', requireAuth, requireRole('Requester'), requestController.myRequests);
 router.post('/:id/cancel', requireAuth, requireRole('Requester'), requestController.cancelRequest);
-router.delete('/:id', requireAuth, requireRole('Requester'), requestController.deleteRequest);
-// Service Lead: sorted incoming queue, claim, deliver
+
+// Service Lead: sorted incoming queue, claim, decline, deliver
 router.get('/queue', requireAuth, requireRole('Assignee', 'Admin'), requestController.departmentQueue);
-router.post('/:id/start', requireAuth, requireRole('Assignee', 'Admin'), requestController.startWorking);
+router.post('/:id/start', requireAuth, requireRole('Assignee'), requestController.startWorking);
+router.post('/:id/decline', requireAuth, requireRole('Assignee'), requestController.declineRequest);
 router.post(
   '/:id/deliver',
   requireAuth,
-  requireRole('Assignee', 'Admin'),
+  requireRole('Assignee'),
   uploadDeliverable.single('deliverable'),
   requestController.completeAndDeliver
 );
@@ -48,5 +49,8 @@ router.get('/:id/download', requireAuth, requestController.downloadDeliverable);
 // Comments: two-way discussion inside the task card
 router.get('/:id/comments', requireAuth, commentController.listComments);
 router.post('/:id/comments', requireAuth, uploadBrief.single('attachment'), commentController.postComment);
+
+// Admin: delete a finished (completed/cancelled/declined) request
+router.delete('/:id', requireAuth, requireRole('Admin'), requestController.deleteRequest);
 
 module.exports = router;

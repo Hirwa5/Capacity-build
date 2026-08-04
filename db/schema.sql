@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS requests (
     title                   VARCHAR(200) NOT NULL,
     description             TEXT,
     priority                VARCHAR(20) NOT NULL DEFAULT 'NORMAL', -- NORMAL | HIGH | URGENT (derived, but stored for filtering)
-    status                  VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- PENDING | IN_PROGRESS | COMPLETED | CANCELLED
+    status                  VARCHAR(30) NOT NULL DEFAULT 'PENDING', -- PENDING | IN_PROGRESS | COMPLETED | CANCELLED | DECLINED
     requested_due_date      TIMESTAMPTZ NOT NULL,
     attachment_url          VARCHAR(500),
     completed_attachment_url VARCHAR(500),

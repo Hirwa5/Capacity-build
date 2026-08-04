@@ -11,6 +11,8 @@ const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const requestRoutes = require('./routes/requestRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const { startReminderJob } = require('./utils/reminderJob');
+
 
 const app = express();
 
@@ -51,6 +53,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`CAPACITY BUILDING server running on http://localhost:${PORT}`);
+  startReminderJob();
 });
 
 module.exports = app;
