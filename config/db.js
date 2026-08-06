@@ -6,6 +6,8 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
+const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : 5432,
@@ -15,6 +17,8 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // Supabase and cloud databases require SSL in production environments
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {
