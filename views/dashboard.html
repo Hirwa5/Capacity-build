@@ -51,12 +51,36 @@
   <section id="queueSection" class="hidden">
     <div class="flex items-center justify-between mb-3">
       <h2 id="queueHeading" class="text-base font-semibold text-slate-700">Incoming Service Queue</h2>
-      <span class="text-xs text-slate-400">Sorted by deadline, then submission order (FIFO)</span>
+      <span class="text-xs text-slate-400"></span>
     </div>
     <div id="queueSubTabs" class="hidden gap-2 mb-4"></div>
     <div id="queueList" class="space-y-3"></div>
   </section>
 
+  <!-- SERVICE LEAD: HISTORY (completed requests) -->
+  <section id="historySection" class="hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base font-semibold text-slate-700">Completed History</h2>
+      <span class="text-xs text-slate-400">Most recently completed first</span>
+    </div>
+    <div id="historyList" class="space-y-3"></div>
+  </section>
+<!-- ADMIN: HISTORY (completed + cancelled + declined, system-wide) -->
+  <section id="adminHistorySection" class="hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base font-semibold text-slate-700">History</h2>
+      <span class="text-xs text-slate-400">Completed, cancelled, and declined — all departments</span>
+    </div>
+    <div id="historyBulkBar" class="hidden items-center gap-3 mb-3 text-sm">
+      <label class="flex items-center gap-2 text-slate-600">
+        <input type="checkbox" id="historySelectAll" class="rounded border-slate-300">
+        Select All
+      </label>
+      <button id="historyDeleteSelectedBtn" class="px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed" disabled>Delete Selected (<span id="historySelectedCount">0</span>)</button>
+      <button id="historyDeleteAllBtn" class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Delete All</button>
+    </div>
+    <div id="adminHistoryList" class="space-y-3"></div>
+  </section>
 </main>
 
 <!-- CREATE REQUEST MODAL -->
@@ -122,6 +146,8 @@ const tabBar = document.getElementById('tabBar');
 const tabs = [];
 if (isRequester) tabs.push({ id: 'myRequestsSection', label: 'My Requests' });
 if (isAssigneeLike) tabs.push({ id: 'queueSection', label: isAdmin ? 'Requests' : 'Service Queue' });
+if (isAssignee) tabs.push({ id: 'historySection', label: 'History' });
+if (isAdmin) tabs.push({ id: 'adminHistorySection', label: 'History' });
 tabBar.innerHTML = tabs.map((t, i) =>
   `<button data-target="${t.id}" class="tabBtn py-3 text-sm font-medium border-b-2 ${i === 0 ? 'border-brand-600 text-brand-600' : 'border-transparent text-slate-500'}">${t.label}</button>`
 ).join('');
@@ -243,6 +269,20 @@ async function loadMyRequests() {
     list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
   }
 }
+function attachRequesterCardHandlers() {
+  document.querySelectorAll('.requesterCancelBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Cancel this request? This cannot be undone.')) return;
+      try {
+        await api(`/requests/${btn.dataset.id}/cancel`, { method: 'POST' });
+        loadMyRequests();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+}
 
 function statusPill(status) {
   const map = {
@@ -273,19 +313,18 @@ function renderRequesterCard(r) {
   </div>`;
 }
 
-function attachRequesterCardHandlers() {
-  document.querySelectorAll('.requesterCancelBtn').forEach(btn => {
+function attachAdminRequestHandlers(container, onDeleted) {
+  container.querySelectorAll('.adminDeleteBtn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Cancel this request?')) return;
+      if (!confirm('Permanently delete this request? This cannot be undone.')) return;
       try {
-        await api(`/requests/${btn.dataset.id}/cancel`, { method: 'POST' });
-        loadMyRequests();
+        await api(`/requests/${btn.dataset.id}`, { method: 'DELETE' });
+        onDeleted();
       } catch (err) { alert(err.message); }
     });
   });
 }
-
 // --- Service Queue (Assignee: actionable) / Requests (Admin: read-only) ---
 async function loadQueue() {
   if (!isAssigneeLike) return;
@@ -300,7 +339,7 @@ async function loadQueue() {
     }
     list.innerHTML = requests.map(isAdmin ? renderAdminRequestCard : renderQueueCard).join('');
     attachDetailHandlers();
-    if (isAdmin) attachAdminRequestHandlers();
+    if (isAdmin) attachAdminRequestHandlers(list, loadQueue);
     if (!isAdmin) attachQueueActionHandlers();
   } catch (err) {
     list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
@@ -326,19 +365,6 @@ function renderAdminRequestCard(r) {
     </div>
     ${canDelete ? `<div class="mt-3"><button class="adminDeleteBtn text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" data-id="${r.id}">Delete</button></div>` : ''}
   </div>`;
-}
-
-function attachAdminRequestHandlers() {
-  document.querySelectorAll('.adminDeleteBtn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (!confirm('Permanently delete this request? This cannot be undone.')) return;
-      try {
-        await api(`/requests/${btn.dataset.id}`, { method: 'DELETE' });
-        loadQueue();
-      } catch (err) { alert(err.message); }
-    });
-  });
 }
 
 function renderQueueCard(r) {
@@ -405,7 +431,142 @@ function openDeliverPrompt(requestId) {
   };
   input.click();
 }
+// --- History (Assignee: personal completed + declined) -----------------
+async function loadHistory() {
+  if (!isAssignee) return;
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+  try {
+    const { requests } = await api('/requests/history');
+    if (!requests.length) {
+      list.innerHTML = '<p class="text-slate-400 text-sm">Nothing here yet.</p>';
+      return;
+    }
+    list.innerHTML = requests.map(renderHistoryCard).join('');
+    attachDetailHandlers();
+  } catch (err) {
+    list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+  }
+}
 
+function renderHistoryCard(r) {
+  const verb = r.status === 'DECLINED' ? 'Declined' : 'Completed';
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-4">
+    <div class="detail-trigger cursor-pointer" data-id="${r.id}">
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="font-semibold text-slate-800">${r.title}</h3>
+        ${statusPill(r.status)}
+      </div>
+      <p class="text-sm text-slate-500">From ${r.requester_name} · ${r.category_name || 'General'}</p>
+      <p class="text-xs text-slate-400 mt-1">${verb} ${formatDate(r.updated_at)}</p>
+    </div>
+  </div>`;
+}
+
+// --- History (Admin: system-wide completed + cancelled + declined) -----
+async function loadAdminHistory() {
+  if (!isAdmin) return;
+  const list = document.getElementById('adminHistoryList');
+  const bulkBar = document.getElementById('historyBulkBar');
+  list.innerHTML = '<p class="text-slate-400 text-sm">Loading…</p>';
+  bulkBar.classList.add('hidden');
+  bulkBar.classList.remove('flex');
+  try {
+    const { requests } = await api('/requests/admin-history');
+    if (!requests.length) {
+      list.innerHTML = '<p class="text-slate-400 text-sm">Nothing here yet.</p>';
+      return;
+    }
+    list.innerHTML = requests.map(renderAdminHistoryCard).join('');
+    attachDetailHandlers();
+    attachAdminRequestHandlers(list, loadAdminHistory);
+    setupHistoryBulkActions(list, bulkBar);
+    bulkBar.classList.remove('hidden');
+    bulkBar.classList.add('flex');
+  } catch (err) {
+    list.innerHTML = `<p class="text-red-600 text-sm">${err.message}</p>`;
+  }
+}
+
+/** Same card as renderAdminRequestCard, but with a select checkbox for bulk delete. */
+function renderAdminHistoryCard(r) {
+  const showAssignee = r.status === 'IN_PROGRESS' || r.status === 'COMPLETED';
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 p-4 flex gap-3">
+    <input type="checkbox" class="historySelectCheckbox mt-1 rounded border-slate-300" data-id="${r.id}">
+    <div class="flex-1">
+      <div class="flex justify-between items-start">
+        <div class="cursor-pointer detail-trigger" data-id="${r.id}">
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="font-semibold text-slate-800">${r.title}</h3>
+            ${statusPill(r.status)}
+          </div>
+          <p class="text-sm text-slate-500">${r.target_department_name} · From ${r.requester_name} ${r.category_name ? '· ' + r.category_name : ''}</p>
+          <p class="text-xs text-slate-400 mt-1">Due ${formatDate(r.requested_due_date)} · Submitted ${formatDate(r.created_at)}</p>
+          ${showAssignee ? `<p class="text-xs text-slate-500 mt-1">Assignee: <span class="font-medium text-slate-700">${r.assignee_name || 'Unassigned'}</span></p>` : ''}
+        </div>
+        <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeClasses(r.badge.color)}">${r.badge.label}</span>
+      </div>
+      <div class="mt-3"><button class="adminDeleteBtn text-sm px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50" data-id="${r.id}">Delete</button></div>
+    </div>
+  </div>`;
+}
+
+/** Wires up the Select All / Delete Selected / Delete All toolbar above the admin History list. */
+function setupHistoryBulkActions(list, bulkBar) {
+  const selectAll = document.getElementById('historySelectAll');
+  const deleteSelectedBtn = document.getElementById('historyDeleteSelectedBtn');
+  const deleteAllBtn = document.getElementById('historyDeleteAllBtn');
+  const countLabel = document.getElementById('historySelectedCount');
+
+  selectAll.checked = false;
+
+  function refreshCount() {
+    const checked = list.querySelectorAll('.historySelectCheckbox:checked');
+    countLabel.textContent = checked.length;
+    deleteSelectedBtn.disabled = checked.length === 0;
+  }
+
+  list.querySelectorAll('.historySelectCheckbox').forEach(cb => {
+    cb.addEventListener('change', refreshCount);
+  });
+
+  // Assigning .onclick (not addEventListener) so re-running this setup on
+  // every reload replaces the handler instead of stacking a new one.
+  selectAll.onclick = () => {
+    list.querySelectorAll('.historySelectCheckbox').forEach(cb => { cb.checked = selectAll.checked; });
+    refreshCount();
+  };
+
+  deleteSelectedBtn.onclick = async () => {
+    const ids = Array.from(list.querySelectorAll('.historySelectCheckbox:checked')).map(cb => cb.dataset.id);
+    if (!ids.length) return;
+    if (!confirm(`Permanently delete ${ids.length} selected request(s)? This cannot be undone.`)) return;
+    await deleteRequestsByIds(ids);
+    loadAdminHistory();
+  };
+
+  deleteAllBtn.onclick = async () => {
+    const ids = Array.from(list.querySelectorAll('.historySelectCheckbox')).map(cb => cb.dataset.id);
+    if (!ids.length) return;
+    if (!confirm(`Permanently delete ALL ${ids.length} request(s) in history? This cannot be undone.`)) return;
+    await deleteRequestsByIds(ids);
+    loadAdminHistory();
+  };
+
+  refreshCount();
+}
+
+async function deleteRequestsByIds(ids) {
+  for (const id of ids) {
+    try {
+      await api(`/requests/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error(`Failed to delete request ${id}:`, err.message);
+    }
+  }
+}
 // --- Task Detail modal (comments) ---------------------------------------
 const detailModal = document.getElementById('detailModal');
 document.getElementById('closeDetail').addEventListener('click', () => detailModal.classList.add('hidden'));
@@ -466,6 +627,8 @@ async function openDetail(id) {
 
 loadMyRequests();
 loadQueue();
+loadHistory();
+loadAdminHistory();
 </script>
 </body>
 </html>

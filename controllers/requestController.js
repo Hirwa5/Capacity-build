@@ -7,7 +7,7 @@ const path = require('path');
 const requestModel = require('../models/requestModel');
 const userModel = require('../models/userModel');
 const { withBadge } = require('../utils/priority');
-const { statusChangeEmail, deliverableReadyEmail } = require('../utils/mailer');
+const { statusChangeEmail, deliverableReadyEmail, newRequestEmail } = require('../utils/mailer');
 
 /** Requester: [ + Create Request ] -> [ Submit Request ] */
 async function createRequest(req, res) {
@@ -33,6 +33,19 @@ async function createRequest(req, res) {
     });
 
     const full = await requestModel.findById(created.id);
+
+    // Notify every Assignee in the target department that a new request landed.
+    const assignees = await userModel.findAssigneesByDepartment(targetDepartmentId);
+    for (const a of assignees) {
+      newRequestEmail({
+        to: a.email,
+        assigneeName: a.full_name,
+        requesterName: full.requester_name,
+        requestTitle: full.title,
+        requestId: full.id,
+      });
+    }
+
     return res.status(201).json({ request: withBadge(full) });
   } catch (err) {
     console.error('createRequest error:', err);
@@ -233,6 +246,37 @@ async function deleteRequest(req, res) {
     return res.status(500).json({ error: 'Failed to delete request.' });
   }
 }
+/** Service Lead: personal history of everything they've completed. */
+async function myHistory(req, res) {
+  try {
+    const rows = await requestModel.findCompletedByAssignee(req.user.id);
+    return res.json({ requests: withBadge(rows) });
+  } catch (err) {
+    console.error('myHistory error:', err);
+    return res.status(500).json({ error: 'Failed to load your completed history.' });
+  }
+}
+/** Service Lead: personal history of everything they've completed or declined. */
+async function myHistory(req, res) {
+  try {
+    const rows = await requestModel.findHistoryByAssignee(req.user.id);
+    return res.json({ requests: withBadge(rows) });
+  } catch (err) {
+    console.error('myHistory error:', err);
+    return res.status(500).json({ error: 'Failed to load your history.' });
+  }
+}
+
+/** Admin: system-wide history of every finished request (completed, cancelled, or declined). */
+async function adminHistory(req, res) {
+  try {
+    const rows = await requestModel.findSystemHistory();
+    return res.json({ requests: withBadge(rows) });
+  } catch (err) {
+    console.error('adminHistory error:', err);
+    return res.status(500).json({ error: 'Failed to load history.' });
+  }
+}
 
 module.exports = {
   createRequest,
@@ -245,4 +289,7 @@ module.exports = {
   cancelRequest,
   declineRequest,
   deleteRequest,
+  myHistory,
+  adminHistory,
+
 };

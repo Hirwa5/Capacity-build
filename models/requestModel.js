@@ -113,12 +113,13 @@ async function completeAndDeliver(id, completedAttachmentUrl) {
 async function decline(id, assigneeId) {
   const result = await pool.query(
     `UPDATE requests
-     SET status = 'DECLINED'
+     SET status = 'DECLINED', assigned_to = $2
      WHERE id = $1 AND status = 'PENDING'
      RETURNING *`,
-    [id]
+    [id, assigneeId]
   );
   return result.rows[0] || null;
+
 }
 
 async function cancel(id, requesterId) {
@@ -179,6 +180,37 @@ async function findDueSoonUnnotified() {
 async function markReminderSent(id) {
   await pool.query('UPDATE requests SET reminder_sent = TRUE WHERE id = $1', [id]);
 }
+/** Assignee's personal history: everything they've completed, most recently finished first. */
+async function findCompletedByAssignee(assigneeId) {
+  const result = await pool.query(
+    `${BASE_SELECT}
+     WHERE req.assigned_to = $1 AND req.status = 'COMPLETED'
+     ORDER BY req.updated_at DESC`,
+    [assigneeId]
+  );
+  return result.rows;
+}
+/** Assignee's personal history: everything they've completed or declined, most recent first. */
+async function findHistoryByAssignee(assigneeId) {
+  const result = await pool.query(
+    `${BASE_SELECT}
+     WHERE req.assigned_to = $1 AND req.status IN ('COMPLETED', 'DECLINED')
+     ORDER BY req.updated_at DESC`,
+    [assigneeId]
+  );
+  return result.rows;
+}
+
+/** Admin: full system history — every finished request, any department, any status. */
+async function findSystemHistory() {
+  const result = await pool.query(`
+    ${BASE_SELECT}
+    WHERE req.status IN ('COMPLETED', 'CANCELLED', 'DECLINED')
+    ORDER BY req.updated_at DESC
+  `);
+  return result.rows;
+}
+
 module.exports = {
   findByRequester,
   findQueueByDepartment,
@@ -193,5 +225,6 @@ module.exports = {
   systemMetrics,
   findDueSoonUnnotified,
   markReminderSent,
-
+  findHistoryByAssignee,
+  findSystemHistory,
 };

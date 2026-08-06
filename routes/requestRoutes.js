@@ -31,7 +31,10 @@ router.get('/mine', requireAuth, requireRole('Requester'), requestController.myR
 router.post('/:id/cancel', requireAuth, requireRole('Requester'), requestController.cancelRequest);
 
 // Service Lead: sorted incoming queue, claim, decline, deliver
+// Service Lead: sorted incoming queue, claim, decline, deliver
 router.get('/queue', requireAuth, requireRole('Assignee', 'Admin'), requestController.departmentQueue);
+router.get('/history', requireAuth, requireRole('Assignee'), requestController.myHistory);
+router.get('/admin-history', requireAuth, requireRole('Admin'), requestController.adminHistory);
 router.post('/:id/start', requireAuth, requireRole('Assignee'), requestController.startWorking);
 router.post('/:id/decline', requireAuth, requireRole('Assignee'), requestController.declineRequest);
 router.post(

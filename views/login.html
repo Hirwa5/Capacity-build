@@ -5,12 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Green Starz Impakt Hub — Auth Portal</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<!-- Imported Serif Font for the banner text -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700;1,900&display=swap" rel="stylesheet">
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
           brand: { 50:'#ECFDF3', 100:'#D3F8E1', 300:'#7FDDA6', 500:'#2FA361', 600:'#1E7A46', 700:'#145C34', 900:'#0B3A20' }
+        },
+        fontFamily: {
+          banner: ['"Playfair Display"', 'serif']
         }
       }
     }
@@ -27,11 +34,24 @@
   <div id="bgOverlay" class="absolute inset-0 bg-black/20 transition-all duration-500 ease-in-out -z-10"></div>
 
   <!-- Top Navigation Header -->
-  <header class="w-full max-w-7xl mx-auto flex justify-between items-center py-2 px-4 z-10">
-    <div class="flex items-center space-x-3">
-      <img src="/views/assets/logo.jpg" alt="Green Starz Logo" class="h-20 w-20 object-contain rounded-full bg-white p-1 shadow-md" onerror="this.style.display='none'">
+  <header class="w-full max-w-7xl mx-auto flex justify-between items-center py-3 px-4 z-10 relative">
+    
+    <!-- Left: Logo -->
+    <div class="flex items-center space-x-3 w-1/4">
+      <img src="/views/assets/logo.jpg" alt="Green Starz Logo" class="h-14 w-14 object-contain rounded-full bg-white p-1 shadow-md" onerror="this.style.display='none'">
     </div>
-    <div class="flex space-x-6 text-white text-base font-medium drop-shadow-md">
+
+    <!-- Center: Brush-Style Green Banner Badge -->
+    <div class="flex-1 flex justify-center">
+      <div class="bg-[#5B9E43] text-white px-6 py-2 rounded-[2.5rem_3.5rem_2rem_3rem] -rotate-1 shadow-lg border-2 border-white/20 transform hover:scale-105 transition-all duration-300">
+        <h1 class="font-banner italic font-black text-sm sm:text-base md:text-xl tracking-wider text-center leading-tight drop-shadow">
+          GREENSTARZ CAPACITY BUILDING PORTAL
+        </h1>
+      </div>
+    </div>
+
+    <!-- Right: Auth Buttons -->
+    <div class="flex justify-end space-x-6 text-white text-base font-medium drop-shadow-md w-1/4">
       <button id="navLoginBtn" class="hover:text-brand-300 transition px-3 py-1 rounded-md">Sign In</button>
       <button id="navRegisterBtn" class="hover:text-brand-300 transition px-3 py-1 rounded-md">Register</button>
     </div>
@@ -50,7 +70,7 @@
           <img src="/views/assets/logo.jpg" alt="Logo" class="h-7 w-7 rounded-full" onerror="this.style.display='none'">
           <span class="text-emerald-950 font-bold tracking-wide text-xs">GREEN STARZ IMPAKT HUB</span>
         </div>
-        <h1 class="text-xl font-black text-slate-900 tracking-tight">CAPACITY BUILDING</h1>
+        <h2 class="text-xl font-black text-slate-900 tracking-tight">CAPACITY BUILDING</h2>
         <p class="text-slate-800 text-[11px] mt-0.5 font-semibold">Internal Service Desk &amp; Task Allocation Portal</p>
       </div>
 
@@ -68,7 +88,7 @@
         <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 rounded-lg shadow-md transition text-sm">Sign In</button>
       </form>
 
-      <!-- REGISTER FORM ONLY (Compact to fit without scrolling) -->
+      <!-- REGISTER FORM ONLY -->
       <form id="registerForm" class="space-y-2.5 hidden">
         <div>
           <label class="block text-xs font-bold text-slate-900 mb-0.5">Full Name</label>
