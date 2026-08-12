@@ -150,10 +150,29 @@ function commentPostedEmail({ to, recipientName, authorName, requestTitle, reque
   });
 }
 
+function dueSoonReminderEmail({ to, recipientName, requestTitle, requestId, dueDate, unclaimed }) {
+  const base = process.env.APP_BASE_URL || 'http://localhost:4000';
+  const dueLabel = new Date(dueDate).toLocaleString();
+  const statusNote = unclaimed
+    ? 'This request is still unclaimed in your department queue.'
+    : 'This request is assigned to you and still in progress.';
+  return sendMail({
+    to,
+    subject: `[CAPACITY BUILDING] Reminder: Request #${requestId} is due soon`,
+    html: renderEmailCard({
+      heading: `Deadline reminder`,
+      bodyHtml: `<p>Hi ${recipientName},</p><p>"<strong>${requestTitle}</strong>" (Ref #${requestId}) is due on <strong>${dueLabel}</strong> — within the next 24 hours, or already overdue.</p><p>${statusNote}</p>`,
+      ctaLabel: 'Open the request',
+      ctaUrl: `${base}/views/dashboard.html?request=${requestId}`,
+    }),
+  });
+}
+
 module.exports = {
   sendMail,
   statusChangeEmail,
   deliverableReadyEmail,
   newRequestEmail,
   commentPostedEmail,
+  dueSoonReminderEmail,
 };
